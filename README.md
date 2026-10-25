@@ -20,6 +20,8 @@ github:uChyis/dsh-plugin-session-purge-target
 
 当前 `main` 的包版本为 `1.0.1`。安装时不带 tag，会跟随 `main` 的最新提交。npm 尚未发布；不要用裸包名安装。
 
+不带 tag 安装的是安装当时的 `main` 最新提交；以后 `main` 有更新，在插件页重新安装/更新一次即可获取新提交。
+
 **本地目录**
 
 把仓库目录（或解压后的 zip）路径填入插件页：
