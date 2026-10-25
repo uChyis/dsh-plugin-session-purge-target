@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "dsh-plugin-session-purge-target",
+    "description": "在会话的「…」菜单中增加删除入口；确认后永久删除该会话及其子会话。"
+  }
+}

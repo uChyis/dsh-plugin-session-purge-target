@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "dsh-plugin-session-purge-target",
+    "description": "Adds a delete entry to the Session menu; deleting asks for confirmation, then permanently removes the session and its sub-sessions."
+  }
+}

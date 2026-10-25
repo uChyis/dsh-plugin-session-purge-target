@@ -1,0 +1,50 @@
+{
+  "name": "dsh-plugin-session-purge-target",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Delete a Session from its menu with confirmation, including its sub-sessions.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/uChyis/dsh-plugin-session-purge-target.git"
+  },
+  "homepage": "https://github.com/uChyis/dsh-plugin-session-purge-target#readme",
+  "bugs": {
+    "url": "https://github.com/uChyis/dsh-plugin-session-purge-target/issues"
+  },
+  "engines": {
+    "dsh": ">=0.2.1-rc.3 <0.3.0"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "session",
+    "delete"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
+    }
+  }
+}

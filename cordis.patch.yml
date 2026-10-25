@@ -1,0 +1,3 @@
+- insert:
+    - id: session-delete
+      name: dsh-plugin-session-purge-target
