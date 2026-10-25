@@ -1,6 +1,6 @@
 # dsh-plugin-session-purge-target
 
-**当前版本：`v1.0.1`**
+**当前版本：`1.0.1`**
 
 在 Harness Web / DSH Desktop 的会话「…」菜单中增加「删除会话」；点击后先确认，确认后永久删除该会话及其记录的子会话。
 
@@ -15,10 +15,10 @@ DSH Desktop 的官方入口是侧栏 **插件 → 添加插件**，支持 npm �
 在插件页输入：
 
 ```text
-github:uChyis/dsh-plugin-session-purge-target#v1.0.1
+github:uChyis/dsh-plugin-session-purge-target
 ```
 
-当前发布版本为 `v1.0.1`。npm 尚未发布；不要用裸包名安装。
+当前 `main` 的包版本为 `1.0.1`。安装时不带 tag，会跟随 `main` 的最新提交。npm 尚未发布；不要用裸包名安装。
 
 **本地目录**
 
@@ -31,7 +31,7 @@ C:\path\to\dsh-plugin-session-purge-target
 Web/CLI profile 也可以用：
 
 ```sh
-dsh plugin --profile <profile> add github:uChyis/dsh-plugin-session-purge-target#v1.0.1
+dsh plugin --profile <profile> add github:uChyis/dsh-plugin-session-purge-target
 ```
 
 本包没有构建步骤和 npm 运行时依赖。安装后如果 Desktop 的启动清单还是旧快照，**完全退出并重开一次 Desktop**。
@@ -113,9 +113,9 @@ Host 测试覆盖正常删除、父会话已归档、运行中 Agent 拒绝、�
 ## 分享与发布
 
 - GitHub 仓库：`https://github.com/uChyis/dsh-plugin-session-purge-target`
-- 当前标签：`v1.0.1`，包含本次质量修复；`v1.0.0` 保留为上一版。
+- 不使用 Git tag；`main` 就是最新版本，安装时省略 tag 即可跟随最新提交。
 - npm：**尚未发布**。发布前先确认 `dsh-plugin-session-purge-target` 仍未被占用；发布时不要把未发布的包名写成当前安装方式。
-- 发布修复时：提交代码、打与代码对应的新 tag、推送后再更新安装示例。安装固定 tag 只包含打 tag 时的代码。
+- 发布更新：提交并推送 `main` 即可；不需要打 tag。
 - 若发布到 npm 或改包名，必须同步三处：
   - `package.json` 的 `name`
   - `cordis.patch.yml` 中 `insert[0].name`
