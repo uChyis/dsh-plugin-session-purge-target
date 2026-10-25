@@ -20,8 +20,8 @@ window.__ModuleLoader__.load({
 			primitives = undefined
 		}
 
-		const NS = 'sessionDelete'
-		const CHANNEL = '/dsh-session-delete'
+		const NS = 'sessionPurgeTarget'
+		const CHANNEL = '/dsh-plugin-session-purge-target'
 		const ENDPOINT = 'delete'
 
 		const en = {
@@ -373,13 +373,13 @@ window.__ModuleLoader__.load({
 				style.textContent = CSS
 				document.head.append(style)
 				return () => style.remove()
-			}, 'session-delete: styles')
+			}, 'session-purge-target: styles')
 
-			ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'session-delete: dictionaries')
+			ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'session-purge-target: dictionaries')
 
 			ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
 				name: 'sidebar.workspaces.session.menu.item',
-				id: 'session-delete',
+				id: 'session-purge-target',
 				order: 500,
 				locale: NS,
 				inject: () => ({ openDelete }),
@@ -387,7 +387,7 @@ window.__ModuleLoader__.load({
 
 			ctx.slots.inject('shell.overlay', () => ctx.slots.register({
 				name: 'shell.overlay',
-				id: 'session-delete-confirm',
+				id: 'session-purge-target-confirm',
 				locale: NS,
 				inject: () => ({ usePending, closeDelete, confirmDelete }),
 			}, DeleteSessionDialog))

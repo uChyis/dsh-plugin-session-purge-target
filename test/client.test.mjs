@@ -51,6 +51,7 @@ assert.equal(typeof plugin.apply, 'function')
 const registrations = []
 const effects = []
 let dictionaries = null
+let rpcCalls = 0
 let nextResult = { ok: true, value: { removedSessionIds: ['session-x'] } }
 const ctx = {
 	effect(fn, label) {
@@ -75,7 +76,8 @@ const ctx = {
 	connection: {
 		rpc: {
 			async call(channel, endpoint, payload) {
-				assert.equal(channel, '/dsh-session-delete')
+				rpcCalls += 1
+				assert.equal(channel, '/dsh-plugin-session-purge-target')
 				assert.equal(endpoint, 'delete')
 				assert.equal(payload.sessionId, 'session-x')
 				if (nextResult instanceof Error) throw nextResult
@@ -90,11 +92,12 @@ plugin.apply(ctx)
 const menu = registrations.find((entry) => entry.options.name === 'sidebar.workspaces.session.menu.item')
 const overlay = registrations.find((entry) => entry.options.name === 'shell.overlay')
 assert.ok(menu, 'menu item must be registered')
-assert.equal(menu.options.id, 'session-delete')
+assert.equal(menu.options.id, 'session-purge-target')
 assert.equal(menu.options.order, 500)
-assert.equal(menu.options.locale, 'sessionDelete')
+assert.equal(menu.options.locale, 'sessionPurgeTarget')
 assert.ok(overlay, 'confirmation dialog must be registered in shell.overlay')
-assert.equal(dictionaries.namespace, 'sessionDelete')
+assert.equal(overlay.options.id, 'session-purge-target-confirm')
+assert.equal(dictionaries.namespace, 'sessionPurgeTarget')
 assert.equal(dictionaries.value.en['menu.deleteSession'], 'Delete session')
 assert.equal(dictionaries.value.zh['menu.deleteSession'], '删除会话')
 assert.ok(dictionaries.value.zh['dialog.desc'].includes('永久删除'))
@@ -132,6 +135,11 @@ assert.equal(dialogTree.props.className, 'dsd-overlay')
 const panel = dialogTree.children[0]
 assert.equal(panel.props.role, 'dialog')
 assert.equal(panel.props['aria-modal'], 'true')
+
+dialog.closeDelete()
+assert.equal(dialog.usePending(), null)
+assert.equal(rpcCalls, 0)
+open.openDelete('session-x', 'Deleting demo')
 
 nextResult = { ok: false, error: { code: 'session-active', message: 'busy', details: { activity: [{ kind: 'job', name: 'build' }] } } }
 await dialog.confirmDelete()

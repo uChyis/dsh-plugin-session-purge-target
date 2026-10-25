@@ -2,3 +2,37 @@ node_modules/
 test/.tmp/
 *.log
 .DS_Store
+Thumbs.db
+
+# Environment files and local secrets. Keep checked-in examples.
+.env
+.env.*
+!.env.example
+!.env.*.example
+.envrc
+!.envrc.example
+.npmrc
+!.npmrc.example
+
+# Private keys and certificates
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.ppk
+*.crt
+*.cer
+*.der
+*.jks
+*.keystore
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+id_ecdsa
+id_ecdsa.*
+id_dsa
+id_dsa.*
+secrets/
+.ssh/

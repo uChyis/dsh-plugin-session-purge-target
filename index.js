@@ -3,15 +3,16 @@
  *
  * The Harness persistence seam deliberately has no deletion API: session logs
  * are append-only files under `$DSH_HOME/sessions`. This plugin therefore
- * deletes exactly one session-owned directory (plus the directories of its
- * recorded sub-sessions) after the Workspace registry has hidden the row.
- * It never deletes a session that still has a live Agent or Session, and it
- * never follows a session directory that resolves outside the store root.
+ * deletes the session-owned directories (plus the directories of its recorded
+ * sub-sessions) after the Workspace registry has hidden the row. It refuses
+ * sessions with a running Agent or active work; idle resident Agents are
+ * deletable. It never follows a session directory that resolves outside the
+ * store root.
  */
 import { lstat, readdir, realpath, rm } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 
-const CHANNEL = '/dsh-session-delete'
+const CHANNEL = '/dsh-plugin-session-purge-target'
 const ENDPOINT = 'delete'
 const MAX_SESSIONS = 512
 
@@ -47,7 +48,7 @@ export function apply(ctx) {
 		path: CHANNEL,
 		handler: (request, response) => serveRpc(ctx, request, response, handler),
 	}
-	ctx.effect(() => ctx.webServer.register(route), 'session-delete: RPC route')
+	ctx.effect(() => ctx.webServer.register(route), 'session-purge-target: RPC route')
 }
 
 /**
@@ -140,14 +141,14 @@ function end(response, status, text) {
 }
 
 /**
- * Delete one session and its recorded sub-session tree.
+ * Delete one session and its recorded sub-session tree, children first.
  * @param ctx - Host context with session persistence, workspace registry, and live registries.
  * @param sessionId - Exact stored session id.
- * @param options - Optional caller cancellation.
+ * @param options - Optional cancellation and directory remover (tests).
  * @returns A wire result: `{ ok: true, value }` or `{ ok: false, error }`.
  */
 export async function performDelete(ctx, sessionId, options = {}) {
-	const { signal } = options
+	const { signal, remove = rm } = options
 	signal?.throwIfAborted()
 
 	const store = ctx.sessionPersistence
@@ -197,39 +198,75 @@ export async function performDelete(ctx, sessionId, options = {}) {
 	}
 
 	const removedDirectories = []
+	const removedByTarget = new Map()
 	const skipped = []
+	const failedSessionIds = []
 	try {
 		const projects = await readdir(rootReal, { withFileTypes: true })
 		for (const target of targets) {
 			signal?.throwIfAborted()
-			const outcome = await removeSessionDirectories(rootReal, target.header, projects)
-			removedDirectories.push(...outcome.paths)
+			let outcome
+			try {
+				outcome = await removeSessionDirectories(rootReal, target.header, projects, remove)
+			} catch (error) {
+				if (error !== null && typeof error === 'object' && error.sessionId === undefined) {
+					error.sessionId = target.header.id
+				}
+				throw error
+			}
+			if (outcome.paths.length > 0) {
+				removedDirectories.push(...outcome.paths)
+				removedByTarget.set(target.header.id, outcome.paths)
+			}
 			if (outcome.failures.length > 0) {
 				const error = new Error(outcome.failures.map((failure) => `${failure.path}: ${failure.message}`).join('; '))
 				error.failures = outcome.failures
+				error.sessionId = target.header.id
 				throw error
 			}
 			if (outcome.paths.length === 0) skipped.push({ sessionId: target.header.id, reason: 'missing' })
 		}
 	} catch (error) {
-		// Hidden rows with a half-deleted log are worse than a hidden row that
-		// the user can restore, so only roll the archive back when nothing moved.
-		if (removedDirectories.length === 0 && !wasArchived) {
+		const removedSessionIds = [...removedByTarget.keys()]
+		const failedSessionId = typeof error?.sessionId === 'string' ? error.sessionId : undefined
+		if (failedSessionId !== undefined && !failedSessionIds.includes(failedSessionId)) {
+			failedSessionIds.push(failedSessionId)
+		}
+		// A surviving parent gets its row back so the user can retry. Only a
+		// parent whose log is already gone falls through to Workspace cleanup.
+		const parentExists = await parentStillExists(store, sessionId, signal)
+		let archiveRestored = false
+		if (parentExists && !wasArchived) {
 			try {
 				await ctx.workspaceRegistry.unarchiveSession(sessionId)
+				archiveRestored = true
 			} catch {
-				// The archive set is a convenience rollback; the delete failure is the report.
+				// The failure report below carries the deletion error; a failed
+				// rollback leaves the row hidden and is visible as archiveRestored: false.
 			}
 		}
+		if (!parentExists) {
+			// Keep the row/list bookkeeping consistent with the missing parent,
+			// while the failure details still name the orphaned descendant.
+			await cleanupWorkspaceMembership(ctx, sessionId)
+			announceRemoval(ctx, sessionId)
+		}
+		const removedCaches = await removeProjectionCaches(rootReal, removedSessionIds)
 		return failure('delete-failed', errorMessage(error), {
-			removedSessionIds: targets.map((target) => target.header.id),
+			removedSessionIds,
+			failedSessionIds,
 			removedDirectories,
 			skipped,
+			parentExists,
+			parentWasArchived: wasArchived,
+			archiveRestored,
+			projectionCacheRemoved: removedCaches,
 			...(Array.isArray(error?.failures) ? { failures: error.failures } : {}),
 		})
 	}
 
-	const removedSessionIds = targets.map((target) => target.header.id)
+	const removedSessionIds = [...removedByTarget.keys()]
+	const sizes = new Map(targets.map((target) => [target.header.id, target.sizeBytes]))
 	const removedCaches = await removeProjectionCaches(rootReal, removedSessionIds)
 
 	// The sidebar row is kept alive by the Workspace membership and the Session
@@ -245,17 +282,34 @@ export async function performDelete(ctx, sessionId, options = {}) {
 		removedDirectories,
 		skipped,
 		projectionCacheRemoved: removedCaches,
-		totalBytes: targets.reduce((sum, target) => sum + (typeof target.sizeBytes === 'number' ? target.sizeBytes : 0), 0),
-		childrenRemoved: targets.length - 1,
+		totalBytes: removedSessionIds.reduce((sum, id) => sum + (typeof sizes.get(id) === 'number' ? sizes.get(id) : 0), 0),
+		childrenRemoved: removedSessionIds.filter((id) => id !== sessionId).length,
 	})
 }
 
 /**
- * Order the target session and every recorded descendant by parentSession.
+ * Whether the requested session still has a log after a partial removal.
+ * A transient stat error is treated as surviving so visibility is not lost.
+ * @param store - Session persistence store.
+ * @param sessionId - Requested session id.
+ * @param signal - Optional cancellation.
+ * @returns Whether the parent log is still present.
+ */
+async function parentStillExists(store, sessionId, signal) {
+	try {
+		return (await store.stat(sessionId, { signal })) !== undefined
+	} catch {
+		return true
+	}
+}
+
+/**
+ * Order every recorded descendant before its parent, with the requested
+ * session last, so a failed child never leaves an already-deleted parent.
  * @param rootId - Session requested by the user.
  * @param rootStat - Its persistence snapshot.
  * @param snapshots - Every stored session snapshot.
- * @returns Target entries in breadth-first order.
+ * @returns Target entries in children-first order.
  */
 function collectDeletionTargets(rootId, rootStat, snapshots) {
 	const byId = new Map()
@@ -289,7 +343,7 @@ function collectDeletionTargets(rootId, rootStat, snapshots) {
 		if (entries.length > MAX_SESSIONS) throw new Error(`session tree exceeds ${MAX_SESSIONS} sessions`)
 		for (const child of children.get(id) ?? []) queue.push(child)
 	}
-	return entries
+	return entries.reverse()
 }
 
 /** Whether this process is actively running the session's Agent. Resident idle Agents are deletable. */
@@ -326,9 +380,10 @@ function sanitizeActivity(activity) {
  * @param root - Canonical session store root.
  * @param header - The session's stored header.
  * @param projects - Immediate project directories under the root, read once per request.
+ * @param remove - Directory remover; defaults to `fs.rm` and is injectable for tests.
  * @returns Removed paths plus per-path failures.
  */
-async function removeSessionDirectories(root, header, projects) {
+async function removeSessionDirectories(root, header, projects, remove = rm) {
 	const encoded = encodeSegment(header.id)
 	const candidates = []
 	for (const project of projects) {
@@ -341,6 +396,7 @@ async function removeSessionDirectories(root, header, projects) {
 			if (isMissing(error)) continue
 			throw error
 		}
+		if (info.isSymbolicLink()) throw new Error(`refusing symlinked session directory for "${header.id}"`)
 		if (!info.isDirectory()) continue
 		let canonical
 		try {
@@ -357,7 +413,7 @@ async function removeSessionDirectories(root, header, projects) {
 	const failures = []
 	for (const candidate of candidates) {
 		try {
-			await rm(candidate, { recursive: true, force: true, maxRetries: 3, retryDelay: 80 })
+			await remove(candidate, { recursive: true, force: true, maxRetries: 3, retryDelay: 80 })
 			paths.push(candidate)
 		} catch (error) {
 			failures.push({ path: candidate, message: errorMessage(error) })
@@ -392,7 +448,7 @@ async function removeProjectionCaches(sessionRoot, sessionIds) {
 
 /**
  * Remove the session from every Workspace membership and the archived set.
- * The registry exposes no session-delete API, but its Workspace entity owns
+ * The registry exposes no session deletion API, but its Workspace entity owns
  * membership (`detachSession`) and the registry owns the archived set. Both
  * are best-effort after the log is gone: a bookkeeping failure must not turn
  * a completed deletion into an error.

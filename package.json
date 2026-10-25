@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-session-purge-target",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Delete a Session from its menu with confirmation, including its sub-sessions.",
   "license": "MIT",
@@ -21,6 +21,9 @@
     "session",
     "delete"
   ],
+  "scripts": {
+    "test": "node test/delete.test.mjs && node test/client.test.mjs"
+  },
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
