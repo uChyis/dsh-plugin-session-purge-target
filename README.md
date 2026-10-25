@@ -1,5 +1,7 @@
 # dsh-plugin-session-purge-target
 
+**当前版本：`v1.0.1`**
+
 在 Harness Web / DSH Desktop 的会话「…」菜单中增加「删除会话」；点击后先确认，确认后永久删除该会话及其记录的子会话。
 
 ## 安装
